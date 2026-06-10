@@ -1102,11 +1102,11 @@ def _meses_detalhe(loja, aberto_key):
         # Inputs editaveis
         for c in COL_INPUT:
             if c == "VT":
-                w = 75
+                w = 78
             elif c == "Líquido":
-                w = 110
+                w = 130
             else:
-                w = 90
+                w = 95
             gb.configure_column(
                 c, width=w, editable=True, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
@@ -1117,7 +1117,12 @@ def _meses_detalhe(loja, aberto_key):
         # Calculadas (read-only)
         for c in COL_CALC:
             # Comissão/Salário podem chegar a 5 digitos
-            w = 100 if c in ("Comissão", "Salário") else 95
+            if c in ("Comissão", "Salário"):
+                w = 115
+            elif c == "Tot. Desc.":
+                w = 112
+            else:
+                w = 100
             gb.configure_column(
                 c, width=w, editable=False, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
