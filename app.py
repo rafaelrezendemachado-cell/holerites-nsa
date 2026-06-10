@@ -1099,6 +1099,16 @@ def _meses_detalhe(loja, aberto_key):
             cellRenderer="agCheckboxCellRenderer",
         )
 
+        # Liquido na linha TOTAL (pinned bottom) ocupa o espaco de Banco e Comiss
+        js_colspan_liquido_total = JsCode("""
+            function(params) {
+                if (params.node && params.node.rowPinned === 'bottom') {
+                    return 3;
+                }
+                return 1;
+            }
+        """)
+
         # Inputs editaveis
         for c in COL_INPUT:
             if c == "VT":
@@ -1107,12 +1117,15 @@ def _meses_detalhe(loja, aberto_key):
                 w = 130
             else:
                 w = 95
-            gb.configure_column(
-                c, width=w, editable=True, type=["numericColumn"],
+            kwargs = dict(
+                width=w, editable=True, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
                 cellEditor="agNumberCellEditor",
                 cellEditorParams={"precision": 2},
             )
+            if c == "Líquido":
+                kwargs["colSpan"] = js_colspan_liquido_total
+            gb.configure_column(c, **kwargs)
 
         # Calculadas (read-only)
         for c in COL_CALC:
