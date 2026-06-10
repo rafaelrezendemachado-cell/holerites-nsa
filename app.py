@@ -1099,30 +1099,32 @@ def _meses_detalhe(loja, aberto_key):
             cellRenderer="agCheckboxCellRenderer",
         )
 
-        # Inputs editaveis. Larguras pensadas pra acomodar TOTAIS (5+ digitos).
-        widths_input = {
-            "Motivac.": 95, "HE": 100, "Domingo": 95,
-            "Vales": 100, "Uniod.": 95, "Plano": 105,
-            "Empr.": 110, "VT": 78, "Líquido": 150,
-        }
+        # Inputs editaveis
         for c in COL_INPUT:
+            if c == "VT":
+                w = 78
+            elif c == "Líquido":
+                w = 130
+            else:
+                w = 95
             gb.configure_column(
-                c, width=widths_input[c], editable=True, type=["numericColumn"],
+                c, width=w, editable=True, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
                 cellEditor="agNumberCellEditor",
                 cellEditorParams={"precision": 2},
             )
 
-        # Calculadas (read-only). Comissao/Salario podem chegar a 6 digitos no TOTAL.
-        widths_calc = {
-            "HE Total": 105,
-            "Comissão": 130,
-            "Salário": 130,
-            "Tot. Desc.": 125,
-        }
+        # Calculadas (read-only)
         for c in COL_CALC:
+            # Comissão/Salário podem chegar a 5 digitos
+            if c in ("Comissão", "Salário"):
+                w = 115
+            elif c == "Tot. Desc.":
+                w = 112
+            else:
+                w = 100
             gb.configure_column(
-                c, width=widths_calc[c], editable=False, type=["numericColumn"],
+                c, width=w, editable=False, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
             )
 
