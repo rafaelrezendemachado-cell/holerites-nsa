@@ -58,18 +58,18 @@ st.markdown(
 
     /* AgGrid: fonte e padding compactos pra caber valores grandes na tela */
     .ag-theme-streamlit, .ag-theme-streamlit-dark {
-        --ag-font-size: 11px;
-        --ag-row-height: 26px;
-        --ag-header-height: 30px;
+        --ag-font-size: 10px;
+        --ag-row-height: 24px;
+        --ag-header-height: 27px;
     }
     .ag-theme-streamlit .ag-cell,
     .ag-theme-streamlit .ag-header-cell {
-        padding-left: 5px !important;
-        padding-right: 5px !important;
-        font-size: 11px !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+        font-size: 10px !important;
     }
     .ag-theme-streamlit .ag-header-cell-label { justify-content: center; }
-    .ag-theme-streamlit .ag-cell { line-height: 26px !important; }
+    .ag-theme-streamlit .ag-cell { line-height: 24px !important; }
 
     /* Colorir grupos de colunas na tabela editavel (tentativa) */
     /* Ordem das colunas: Nome(1) Banco(2) Comiss(3) Motivac(4) HE(5) Domingo(6) HE Total(7)
