@@ -1154,10 +1154,22 @@ def _meses_detalhe(loja, aberto_key):
             "Empr.":       {"backgroundColor": COR_DE},
             "VT":          {"backgroundColor": COR_DE},
             "Tot. Desc.":  {"backgroundColor": COR_DE, "fontWeight": "700"},
-            "Líquido":     {"backgroundColor": COR_LI, "fontWeight": "700", "fontSize": "15px"},
         }
         for col, est in estilos.items():
             gb.configure_column(col, cellStyle=est)
+
+        # Liquido: estilo diferente pra linha TOTAL (pinned)
+        js_liquido_style = JsCode(f"""
+            function(params) {{
+                const isTotal = params.node && params.node.rowPinned === 'bottom';
+                return {{
+                    backgroundColor: '{COR_LI}',
+                    fontWeight: '700',
+                    fontSize: isTotal ? '10px' : '9px'
+                }};
+            }}
+        """)
+        gb.configure_column("Líquido", cellStyle=js_liquido_style)
 
         # Linha TOTAL fixa no rodape (pinned)
         totais = {"Nome": "TOTAL", "Banco": "", "Comiss.": ""}
@@ -1173,12 +1185,12 @@ def _meses_detalhe(loja, aberto_key):
                 update_mode=GridUpdateMode.VALUE_CHANGED,
                 allow_unsafe_jscode=True,
                 fit_columns_on_grid_load=False,
-                height=min(700, 60 + 22 * (len(df_g) + 1)),
+                height=min(700, 55 + 20 * (len(df_g) + 1)),
                 theme="streamlit",
                 custom_css={
                     ".ag-cell, .ag-cell-value": {
-                        "font-size": "9px !important",
-                        "line-height": "22px !important",
+                        "font-size": "9px",
+                        "line-height": "20px !important",
                         "padding-left": "4px !important",
                         "padding-right": "4px !important",
                     },
@@ -1188,14 +1200,14 @@ def _meses_detalhe(loja, aberto_key):
                         "padding-right": "4px !important",
                     },
                     ".ag-row": {
-                        "height": "22px !important",
+                        "height": "20px !important",
                     },
                     ".ag-header": {
-                        "min-height": "25px !important",
-                        "height": "25px !important",
+                        "min-height": "23px !important",
+                        "height": "23px !important",
                     },
                     ".ag-header-cell": {
-                        "height": "25px !important",
+                        "height": "23px !important",
                     },
                 },
                 key=f"aggrid_mes_{mes_id}_{ordem}_{banco_nome}",
