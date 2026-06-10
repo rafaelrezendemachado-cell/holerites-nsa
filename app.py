@@ -56,20 +56,20 @@ st.markdown(
     button[kind="primary"]:hover { background-color: #15304B; border-color: #15304B; }
     div[data-testid="stExpander"] { background-color: #FFFFFF; border: 1px solid #C7D0DB; border-radius: 6px; }
 
-    /* AgGrid: fonte menor e cell padding apertado pra caber tudo na tela */
+    /* AgGrid: fonte e padding compactos pra caber valores grandes na tela */
     .ag-theme-streamlit, .ag-theme-streamlit-dark {
-        --ag-font-size: 12px;
-        --ag-row-height: 28px;
-        --ag-header-height: 32px;
+        --ag-font-size: 11px;
+        --ag-row-height: 26px;
+        --ag-header-height: 30px;
     }
     .ag-theme-streamlit .ag-cell,
     .ag-theme-streamlit .ag-header-cell {
-        padding-left: 6px !important;
-        padding-right: 6px !important;
-        font-size: 12px !important;
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+        font-size: 11px !important;
     }
     .ag-theme-streamlit .ag-header-cell-label { justify-content: center; }
-    .ag-theme-streamlit .ag-cell { line-height: 28px !important; }
+    .ag-theme-streamlit .ag-cell { line-height: 26px !important; }
 
     /* Colorir grupos de colunas na tabela editavel (tentativa) */
     /* Ordem das colunas: Nome(1) Banco(2) Comiss(3) Motivac(4) HE(5) Domingo(6) HE Total(7)
