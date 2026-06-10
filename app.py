@@ -1173,8 +1173,31 @@ def _meses_detalhe(loja, aberto_key):
                 update_mode=GridUpdateMode.VALUE_CHANGED,
                 allow_unsafe_jscode=True,
                 fit_columns_on_grid_load=False,
-                height=min(700, 70 + 28 * (len(df_g) + 1)),
+                height=min(700, 60 + 22 * (len(df_g) + 1)),
                 theme="streamlit",
+                custom_css={
+                    ".ag-cell, .ag-cell-value": {
+                        "font-size": "9px !important",
+                        "line-height": "22px !important",
+                        "padding-left": "4px !important",
+                        "padding-right": "4px !important",
+                    },
+                    ".ag-header-cell, .ag-header-cell-text": {
+                        "font-size": "9px !important",
+                        "padding-left": "4px !important",
+                        "padding-right": "4px !important",
+                    },
+                    ".ag-row": {
+                        "height": "22px !important",
+                    },
+                    ".ag-header": {
+                        "min-height": "25px !important",
+                        "height": "25px !important",
+                    },
+                    ".ag-header-cell": {
+                        "height": "25px !important",
+                    },
+                },
                 key=f"aggrid_mes_{mes_id}_{ordem}_{banco_nome}",
             )
 
