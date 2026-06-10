@@ -1085,23 +1085,28 @@ def _meses_detalhe(loja, aberto_key):
         gb.configure_default_column(resizable=True, sortable=False, editable=False)
 
         # Colunas de identificacao
-        gb.configure_column("Nome", width=240, editable=False, pinned="left")
+        gb.configure_column("Nome", width=250, editable=False, pinned="left")
         gb.configure_column(
-            "Banco", width=58, editable=True,
+            "Banco", width=68, editable=True,
             cellEditor="agSelectCellEditor",
             cellEditorParams={"values": opcoes_banco},
             valueFormatter=js_fmt_sigla,
             headerName="Banco",
         )
         gb.configure_column(
-            "Comiss.", width=36, editable=True,
+            "Comiss.", width=42, editable=True,
             cellEditor="agCheckboxCellEditor",
             cellRenderer="agCheckboxCellRenderer",
         )
 
         # Inputs editaveis
         for c in COL_INPUT:
-            w = 75 if c == "VT" else 90
+            if c == "VT":
+                w = 75
+            elif c == "Líquido":
+                w = 110
+            else:
+                w = 90
             gb.configure_column(
                 c, width=w, editable=True, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
