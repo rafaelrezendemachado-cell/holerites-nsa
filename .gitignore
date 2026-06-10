@@ -1,0 +1,12 @@
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.DS_Store
+*.xlsx
+*.pdf
+_teste_*.py
+_inspect_*.py
+_conferir.py
+_compara.py
+venv/
+.venv/
