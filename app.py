@@ -1085,26 +1085,25 @@ def _meses_detalhe(loja, aberto_key):
         gb.configure_default_column(resizable=True, sortable=False, editable=False)
 
         # Colunas de identificacao
-        gb.configure_column("Nome", minWidth=240, flex=3.5, editable=False, pinned="left")
+        gb.configure_column("Nome", width=240, editable=False, pinned="left")
         gb.configure_column(
-            "Banco", minWidth=48, flex=0.4, editable=True,
+            "Banco", width=58, editable=True,
             cellEditor="agSelectCellEditor",
             cellEditorParams={"values": opcoes_banco},
             valueFormatter=js_fmt_sigla,
             headerName="Banco",
         )
         gb.configure_column(
-            "Comiss.", minWidth=28, flex=0.22, editable=True,
+            "Comiss.", width=36, editable=True,
             cellEditor="agCheckboxCellEditor",
             cellRenderer="agCheckboxCellRenderer",
         )
 
         # Inputs editaveis
         for c in COL_INPUT:
-            mw = 60 if c == "VT" else 70
-            fl = 0.85 if c == "VT" else 1.0
+            w = 75 if c == "VT" else 90
             gb.configure_column(
-                c, minWidth=mw, flex=fl, editable=True, type=["numericColumn"],
+                c, width=w, editable=True, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
                 cellEditor="agNumberCellEditor",
                 cellEditorParams={"precision": 2},
@@ -1113,9 +1112,9 @@ def _meses_detalhe(loja, aberto_key):
         # Calculadas (read-only)
         for c in COL_CALC:
             # Comissão/Salário podem chegar a 5 digitos
-            fl = 1.1 if c in ("Comissão", "Salário") else 1.0
+            w = 100 if c in ("Comissão", "Salário") else 95
             gb.configure_column(
-                c, minWidth=70, flex=fl, editable=False, type=["numericColumn"],
+                c, width=w, editable=False, type=["numericColumn"],
                 valueFormatter=js_fmt_real,
             )
 
@@ -1150,7 +1149,7 @@ def _meses_detalhe(loja, aberto_key):
                 data_return_mode=DataReturnMode.AS_INPUT,
                 update_mode=GridUpdateMode.VALUE_CHANGED,
                 allow_unsafe_jscode=True,
-                fit_columns_on_grid_load=True,
+                fit_columns_on_grid_load=False,
                 height=min(700, 70 + 28 * (len(df_g) + 1)),
                 theme="streamlit",
                 key=f"aggrid_mes_{mes_id}_{ordem}_{banco_nome}",
