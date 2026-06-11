@@ -396,13 +396,18 @@ def _ordenar_abas_cronologico(wb):
 # API publica
 # ============================================================
 
-def gerar_xlsx_de_holerites(linhas, data_pag, planilha_existente_bytes=None):
+def gerar_xlsx_de_holerites(linhas, data_pag, planilha_existente_bytes=None,
+                            tipo="regular", competencia_label=None):
     """
     Gera/atualiza planilha a partir de uma lista de holerites do banco.
 
     `linhas`: list de dicts com:
       nome, banco_nome, banco_ordem, comissionada, motivacional, he, domingo,
       vales, uniodonto, plano_saude, emprestimo, vale_transporte, liquido
+
+    `tipo`: 'regular' | '13_1' | '13_2'
+    `competencia_label`: texto curto pra mostrar no header da secao
+                        (ex: "Maio 2026", "Ano 2026", "13º 1ª parcela")
 
     Cada banco vira uma secao da aba (multi-banco).
     """
@@ -414,6 +419,10 @@ def gerar_xlsx_de_holerites(linhas, data_pag, planilha_existente_bytes=None):
             wb.remove(wb["Sheet"])
 
     nome_aba = nome_aba_por_data(data_pag)
+    if tipo == "13_1":
+        nome_aba = f"{nome_aba} - 13o 1a"
+    elif tipo == "13_2":
+        nome_aba = f"{nome_aba} - 13o 2a"
     if nome_aba in wb.sheetnames:
         ws = wb[nome_aba]
         _limpar_aba(ws)
@@ -439,7 +448,10 @@ def gerar_xlsx_de_holerites(linhas, data_pag, planilha_existente_bytes=None):
             continue
         grupo_ord = sorted(grupo, key=lambda l: chave(l["nome"]))
 
-        _escrever_cabecalho_secao(ws, linha, banco_nome.upper(), data_pag)
+        titulo_secao = banco_nome.upper()
+        if competencia_label:
+            titulo_secao += f"   |   {competencia_label}"
+        _escrever_cabecalho_secao(ws, linha, titulo_secao, data_pag)
         linha += 1
         _escrever_cabecalho_colunas(ws, linha)
         linha += 1

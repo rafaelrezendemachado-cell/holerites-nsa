@@ -91,16 +91,31 @@ def upsert_banco(loja_id: str, nome: str, ordem: int = 0):
     }).execute().data
 
 
-def upsert_mes(loja_id: str, ano: int, mes: int, data_pagamento):
-    """Cria ou retorna o registro do mes."""
-    existente = get_client().table("meses").select("*") \
-        .eq("loja_id", loja_id).eq("ano", ano).eq("mes", mes) \
+def upsert_mes(loja_id: str, ano: int, mes: int, data_pagamento,
+               tipo: str = "regular",
+               competencia_mes=None, competencia_ano=None):
+    """
+    Cria ou retorna o registro do mes.
+    Chave de unicidade: (loja, ano, mes, tipo)
+    """
+    cli = get_client()
+    existente = cli.table("meses").select("*") \
+        .eq("loja_id", loja_id).eq("ano", ano).eq("mes", mes).eq("tipo", tipo) \
         .limit(1).execute().data
     if existente:
+        # Atualiza data/competencia caso mudaram
+        cli.table("meses").update({
+            "data_pagamento": data_pagamento.isoformat(),
+            "competencia_mes": competencia_mes,
+            "competencia_ano": competencia_ano,
+        }).eq("id", existente[0]["id"]).execute()
         return existente[0]
-    return get_client().table("meses").insert({
+    return cli.table("meses").insert({
         "loja_id": loja_id, "ano": ano, "mes": mes,
         "data_pagamento": data_pagamento.isoformat(),
+        "tipo": tipo,
+        "competencia_mes": competencia_mes,
+        "competencia_ano": competencia_ano,
     }).execute().data[0]
 
 

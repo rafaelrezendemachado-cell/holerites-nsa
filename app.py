@@ -523,27 +523,75 @@ def _etapa_upload(loja, etapa_key):
     from config import MES_NOME
 
     st.subheader("1. Carregar PDF do holerite")
-    st.caption("Selecione o PDF mensal com todas as funcionárias.")
+    st.caption("Selecione o PDF e diga qual tipo de holerite é.")
 
     pdf = st.file_uploader("Arquivo PDF", type=["pdf"], label_visibility="collapsed")
 
-    col_a, col_b = st.columns([1, 2])
+    st.write("")
+
+    # Tipo de holerite
+    tipo_labels = {
+        "regular": "Regular (mensal)",
+        "13_1": "13º salário — 1ª parcela",
+        "13_2": "13º salário — 2ª parcela",
+    }
+    tipo = st.radio(
+        "Tipo de holerite",
+        list(tipo_labels.keys()),
+        format_func=lambda k: tipo_labels[k],
+        horizontal=True,
+    )
+
+    st.write("")
+
+    # Data de pagamento + competência
+    col_a, col_b, col_c = st.columns([1, 1, 1])
     with col_a:
         data_pag = st.date_input(
             "Data de pagamento",
             value=date.today(),
             format="DD/MM/YYYY",
         )
-    with col_b:
-        st.write("")
-        st.write("")
+
+    if tipo == "regular":
+        # Auto-sugere competência = mês de pagamento - 1
+        mes_default = data_pag.month - 1 if data_pag.month > 1 else 12
+        ano_default = data_pag.year if data_pag.month > 1 else data_pag.year - 1
+        with col_b:
+            competencia_mes = st.selectbox(
+                "Mês de competência",
+                options=list(range(1, 13)),
+                index=mes_default - 1,
+                format_func=lambda m: MES_NOME[m],
+            )
+        with col_c:
+            competencia_ano = st.number_input(
+                "Ano de competência",
+                min_value=2020, max_value=2099, step=1,
+                value=ano_default,
+            )
+    else:
+        # 13º: só ano (mês não faz sentido)
+        with col_b:
+            competencia_mes = None
+            competencia_ano = st.number_input(
+                "Ano do 13º",
+                min_value=2020, max_value=2099, step=1,
+                value=data_pag.year,
+            )
+
+    # Identificação
+    if tipo == "regular":
         aba = f"{MES_NOME[data_pag.month]} {data_pag.year}"
-        st.markdown(f"**Aba do mês:** {aba}")
+    elif tipo == "13_1":
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (1ª)"
+    else:
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (2ª)"
+    st.markdown(f"**Identificação:** {aba}")
 
     st.write("")
 
     pode_processar = pdf is not None
-
     if st.button("Processar PDF", type="primary", disabled=not pode_processar):
         with st.spinner("Lendo o PDF…"):
             from parser import extrair_holerites
@@ -551,6 +599,9 @@ def _etapa_upload(loja, etapa_key):
 
         st.session_state[f"proc_dados_{loja['codigo']}"] = dados_pdf
         st.session_state[f"proc_data_{loja['codigo']}"] = data_pag.isoformat()
+        st.session_state[f"proc_tipo_{loja['codigo']}"] = tipo
+        st.session_state[f"proc_comp_mes_{loja['codigo']}"] = competencia_mes
+        st.session_state[f"proc_comp_ano_{loja['codigo']}"] = int(competencia_ano)
         st.session_state[etapa_key] = "conferencia"
         st.rerun()
 
@@ -560,6 +611,9 @@ def _etapa_conferencia(loja, etapa_key):
 
     dados_pdf = st.session_state.get(f"proc_dados_{loja['codigo']}", {})
     data_iso = st.session_state.get(f"proc_data_{loja['codigo']}")
+    tipo = st.session_state.get(f"proc_tipo_{loja['codigo']}", "regular")
+    comp_mes = st.session_state.get(f"proc_comp_mes_{loja['codigo']}")
+    comp_ano = st.session_state.get(f"proc_comp_ano_{loja['codigo']}")
     if not dados_pdf or not data_iso:
         st.error("Dados perdidos. Volte e faça upload de novo.")
         if st.button("Voltar"):
@@ -569,10 +623,20 @@ def _etapa_conferencia(loja, etapa_key):
 
     from datetime import datetime
     data_pag = datetime.fromisoformat(data_iso).date()
-    aba = f"{MES_NOME[data_pag.month]} {data_pag.year}"
+    if tipo == "regular":
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year}"
+    elif tipo == "13_1":
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (1ª)"
+    else:
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (2ª)"
 
     st.subheader(f"2. Conferência — {aba}")
-    st.caption(f"Data de pagamento: {data_pag.strftime('%d/%m/%Y')}")
+    legenda = f"Data de pagamento: {data_pag.strftime('%d/%m/%Y')}"
+    if tipo == "regular" and comp_mes:
+        legenda += f"  •  Competência: {MES_NOME[comp_mes]} {comp_ano}"
+    elif tipo != "regular":
+        legenda += f"  •  Ano: {comp_ano}"
+    st.caption(legenda)
 
     # ===== Match com cadastro =====
     funcs_banco = db.listar_funcionarias(loja["id"], ativas_apenas=True)
@@ -701,14 +765,21 @@ def _etapa_conferencia(loja, etapa_key):
             st.rerun()
     with col_salvar:
         if st.button("Salvar mês", type="primary", use_container_width=True):
-            _salvar_mes(loja, etapa_key, data_pag, df, edited, nome_pra_id, bancos_por_id)
+            _salvar_mes(loja, etapa_key, data_pag, df, edited, nome_pra_id, bancos_por_id,
+                        tipo=tipo, competencia_mes=comp_mes, competencia_ano=comp_ano)
 
 
-def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos_por_id):
+def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos_por_id,
+                tipo="regular", competencia_mes=None, competencia_ano=None):
     cli = db.get_client()
 
     # 1) Cria/recupera o mes
-    mes = db.upsert_mes(loja["id"], data_pag.year, data_pag.month, data_pag)
+    mes = db.upsert_mes(
+        loja["id"], data_pag.year, data_pag.month, data_pag,
+        tipo=tipo,
+        competencia_mes=competencia_mes,
+        competencia_ano=competencia_ano,
+    )
 
     # 2) Cadastra novas funcionarias e ajusta nome_id
     registros = []
@@ -731,10 +802,14 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
             func_id = r[0]["id"] if isinstance(r, list) else r["id"]
             n_novas += 1
 
+        # Pra 13º, ignora comiss. e marca tudo como comissionada (assim o valor
+        # vai todo pra coluna Comissão, sem distinção entre Comissão e Salário)
+        comissionada_save = True if tipo != "regular" else bool(novo["Comiss."])
+
         registros.append({
             "funcionaria_id": func_id,
             "banco_id": banco_id,
-            "comissionada": bool(novo["Comiss."]),
+            "comissionada": comissionada_save,
             "motivacional": float(novo["Motivac."]),
             "he": float(novo["HE"]),
             "domingo": float(novo["Domingo"]),
@@ -769,7 +844,13 @@ def _etapa_sucesso(loja, etapa_key):
 
     from datetime import datetime
     data_pag = datetime.fromisoformat(resumo["data_pag"]).date()
-    aba = f"{MES_NOME[data_pag.month]} {data_pag.year}"
+    tipo = st.session_state.get(f"proc_tipo_{loja['codigo']}", "regular")
+    if tipo == "regular":
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year}"
+    elif tipo == "13_1":
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (1ª)"
+    else:
+        aba = f"{MES_NOME[data_pag.month]} {data_pag.year} — 13º (2ª)"
 
     st.success(f"**{aba}** salvo com sucesso.")
     st.write("")
@@ -821,9 +902,25 @@ def _meses_lista(loja, aberto_key):
     for m in meses:
         hols = cli.table("holerites").select("liquido,banco_id").eq("mes_id", m["id"]).execute().data
         total = sum(float(h["liquido"]) for h in hols)
+        tipo_m = m.get("tipo", "regular")
+        if tipo_m == "regular":
+            label_mes = f"{MES_NOME[m['mes']]} {m['ano']}"
+        elif tipo_m == "13_1":
+            label_mes = f"{MES_NOME[m['mes']]} {m['ano']} — 13º (1ª)"
+        else:
+            label_mes = f"{MES_NOME[m['mes']]} {m['ano']} — 13º (2ª)"
+
+        # Competência (só preenche pra regular)
+        comp = ""
+        if m.get("competencia_mes") and m.get("competencia_ano"):
+            comp = f"Competência: {MES_NOME[m['competencia_mes']]} {m['competencia_ano']}"
+        elif tipo_m != "regular" and m.get("competencia_ano"):
+            comp = f"Ano do 13º: {m['competencia_ano']}"
+
         linhas.append({
             "id": m["id"],
-            "Mês": f"{MES_NOME[m['mes']]} {m['ano']}",
+            "Mês": label_mes,
+            "Competência": comp,
             "Data pagamento": m["data_pagamento"],
             "Funcionárias": len(hols),
             "Total líquido (R$)": round(total, 2),
@@ -834,9 +931,11 @@ def _meses_lista(loja, aberto_key):
     # Mostra cada mes como linha clicavel
     for _, row in df.iterrows():
         with st.container(border=True):
-            col_a, col_b, col_c, col_d, col_e = st.columns([3, 2, 2, 2, 1])
+            col_a, col_b, col_c, col_d, col_e = st.columns([3, 3, 2, 2, 1])
             with col_a:
                 st.markdown(f"**{row['Mês']}**")
+                if row["Competência"]:
+                    st.caption(row["Competência"])
             with col_b:
                 from datetime import datetime
                 d = datetime.fromisoformat(row["Data pagamento"]).date()
@@ -866,12 +965,24 @@ def _meses_detalhe(loja, aberto_key):
     mes = mes[0]
 
     data_pag = datetime.fromisoformat(mes["data_pagamento"]).date()
-    aba = f"{MES_NOME[mes['mes']]} {mes['ano']}"
+    tipo_m = mes.get("tipo", "regular")
+    if tipo_m == "regular":
+        aba = f"{MES_NOME[mes['mes']]} {mes['ano']}"
+    elif tipo_m == "13_1":
+        aba = f"{MES_NOME[mes['mes']]} {mes['ano']} — 13º (1ª parcela)"
+    else:
+        aba = f"{MES_NOME[mes['mes']]} {mes['ano']} — 13º (2ª parcela)"
+
+    caption = f"Data de pagamento: {data_pag.strftime('%d/%m/%Y')}  •  Loja: {loja['nome']}"
+    if mes.get("competencia_mes") and mes.get("competencia_ano"):
+        caption += f"  •  Competência: {MES_NOME[mes['competencia_mes']]} {mes['competencia_ano']}"
+    elif tipo_m != "regular" and mes.get("competencia_ano"):
+        caption += f"  •  Ano do 13º: {mes['competencia_ano']}"
 
     col_a, col_b = st.columns([4, 1])
     with col_a:
         st.title(aba)
-        st.caption(f"Data de pagamento: {data_pag.strftime('%d/%m/%Y')}  •  Loja: {loja['nome']}")
+        st.caption(caption)
     with col_b:
         st.write("")
         if st.button("← Voltar", use_container_width=True):
@@ -1313,11 +1424,29 @@ def _meses_detalhe(loja, aberto_key):
                 "liquido": float(h["liquido"]),
             })
         from excel_writer import gerar_xlsx_de_holerites
-        xlsx_bytes = gerar_xlsx_de_holerites(linhas_xlsx, data_pag)
+        # Texto de competencia que vai aparecer no header da secao no Excel
+        if mes.get("competencia_mes") and mes.get("competencia_ano"):
+            comp_label = f"Competência: {MES_NOME[mes['competencia_mes']]} {mes['competencia_ano']}"
+        elif tipo_m == "13_1":
+            comp_label = f"13º (1ª parcela) — Ano {mes.get('competencia_ano') or mes['ano']}"
+        elif tipo_m == "13_2":
+            comp_label = f"13º (2ª parcela) — Ano {mes.get('competencia_ano') or mes['ano']}"
+        else:
+            comp_label = None
+        xlsx_bytes = gerar_xlsx_de_holerites(
+            linhas_xlsx, data_pag,
+            tipo=tipo_m, competencia_label=comp_label,
+        )
+        nome_arquivo = f"Holerites_{loja['codigo']}_{mes['ano']}-{mes['mes']:02d}"
+        if tipo_m == "13_1":
+            nome_arquivo += "_13o-1a"
+        elif tipo_m == "13_2":
+            nome_arquivo += "_13o-2a"
+        nome_arquivo += ".xlsx"
         st.download_button(
             "Baixar Excel",
             data=xlsx_bytes,
-            file_name=f"Holerites_{loja['codigo']}_{mes['ano']}-{mes['mes']:02d}.xlsx",
+            file_name=nome_arquivo,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
