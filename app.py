@@ -119,10 +119,26 @@ st.markdown(
 )
 
 
+import math
+
+
+# Converte para float, tratando NaN/None/string-vazia como 0
+def safe_float(v):
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return 0.0
+        return f
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # Helper de formatacao brasileira: 1234.56 -> "R$ 1.234,56"
 def fmt_real(v):
     try:
         v = float(v)
+        if math.isnan(v) or math.isinf(v):
+            return "R$ 0,00"
     except (TypeError, ValueError):
         return ""
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -810,15 +826,15 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
             "funcionaria_id": func_id,
             "banco_id": banco_id,
             "comissionada": comissionada_save,
-            "motivacional": float(novo["Motivac."]),
-            "he": float(novo["HE"]),
-            "domingo": float(novo["Domingo"]),
-            "vales": float(novo["Vales"]),
-            "uniodonto": float(novo["Uniod."]),
-            "plano_saude": float(novo["Plano"]),
-            "emprestimo": float(novo["Empr."]),
-            "vale_transporte": float(novo["VT"]),
-            "liquido": float(novo["Líquido"]),
+            "motivacional": safe_float(novo["Motivac."]),
+            "he": safe_float(novo["HE"]),
+            "domingo": safe_float(novo["Domingo"]),
+            "vales": safe_float(novo["Vales"]),
+            "uniodonto": safe_float(novo["Uniod."]),
+            "plano_saude": safe_float(novo["Plano"]),
+            "emprestimo": safe_float(novo["Empr."]),
+            "vale_transporte": safe_float(novo["VT"]),
+            "liquido": safe_float(novo["Líquido"]),
         })
 
     db.salvar_holerites_em_lote(mes["id"], registros)
@@ -1366,8 +1382,10 @@ def _meses_detalhe(loja, aberto_key):
                     ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
                     ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
                 ]:
-                    if abs(float(orig[lbl]) - float(novo[lbl])) > 0.005:
-                        update[dbcol] = float(novo[lbl])
+                    o = safe_float(orig[lbl])
+                    n_ = safe_float(novo[lbl])
+                    if abs(o - n_) > 0.005:
+                        update[dbcol] = n_
                 db.atualizar_holerite(orig["_id"], update)
                 movidas += 1
     if movidas:
@@ -1391,8 +1409,10 @@ def _meses_detalhe(loja, aberto_key):
                     ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
                     ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
                 ]:
-                    if abs(float(orig[campo_lbl]) - float(novo[campo_lbl])) > 0.005:
-                        update[campo_db] = float(novo[campo_lbl])
+                    o = safe_float(orig[campo_lbl])
+                    n_ = safe_float(novo[campo_lbl])
+                    if abs(o - n_) > 0.005:
+                        update[campo_db] = n_
                 if update:
                     db.atualizar_holerite(orig["_id"], update)
                     n += 1
