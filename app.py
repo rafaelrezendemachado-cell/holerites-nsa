@@ -133,6 +133,20 @@ def safe_float(v):
         return 0.0
 
 
+def limpar_para_json(obj):
+    """Limpa recursivamente um valor pra que seja JSON-encodable.
+    NaN/Inf -> 0.0. None permanece. Strings/bools/ints intactos."""
+    if isinstance(obj, dict):
+        return {k: limpar_para_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [limpar_para_json(v) for v in obj]
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    return obj
+
+
 # Helper de formatacao brasileira: 1234.56 -> "R$ 1.234,56"
 def fmt_real(v):
     try:
@@ -837,7 +851,15 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
             "liquido": safe_float(novo["Líquido"]),
         })
 
-    db.salvar_holerites_em_lote(mes["id"], registros)
+    try:
+        registros_limpos = limpar_para_json(registros)
+        db.salvar_holerites_em_lote(mes["id"], registros_limpos)
+    except Exception as e:
+        st.error(f"**Erro ao salvar:** {type(e).__name__}: {e}")
+        with st.expander("Detalhes técnicos (clique pra ver)"):
+            st.write("Registros sendo salvos:")
+            st.json(registros)
+        return
 
     st.session_state[f"proc_resumo_{loja['codigo']}"] = {
         "mes_id": mes["id"],
