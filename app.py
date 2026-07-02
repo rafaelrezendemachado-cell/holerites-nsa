@@ -823,7 +823,9 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
             continue
 
         func_id = orig.get("_id")
-        if not func_id:
+        # Trata None, NaN, ou qualquer coisa que nao seja UUID string
+        eh_uuid_valido = isinstance(func_id, str) and len(func_id) >= 8
+        if not eh_uuid_valido:
             # Cadastra nova
             r = db.upsert_funcionaria(
                 loja_id=loja["id"], nome=novo["Nome"],
