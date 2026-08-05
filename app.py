@@ -1097,6 +1097,88 @@ def _form_incluir_manual(loja, mes_id, banco_nome, banco_id, incluir_key):
                 st.rerun()
 
 
+def _form_editar_mes(mes, tipo, edit_key):
+    """Formulario pra alterar data de pagamento e competencia de um mes ja salvo."""
+    from config import MES_NOME
+    from datetime import datetime
+
+    with st.container(border=True):
+        st.markdown("**Editar informações do mês**")
+        st.caption(
+            "Ajuste a data de pagamento e a competência. "
+            "Se você mudar o mês da data, a aba do mês muda junto."
+        )
+
+        data_pag_atual = datetime.fromisoformat(mes["data_pagamento"]).date()
+        comp_mes_atual = mes.get("competencia_mes") or (
+            data_pag_atual.month - 1 if data_pag_atual.month > 1 else 12
+        )
+        comp_ano_atual = mes.get("competencia_ano") or (
+            data_pag_atual.year if data_pag_atual.month > 1 else data_pag_atual.year - 1
+        )
+
+        with st.form(f"form_{edit_key}"):
+            col_d, col_m, col_a = st.columns([1, 1, 1])
+            with col_d:
+                nova_data = st.date_input(
+                    "Data de pagamento",
+                    value=data_pag_atual,
+                    format="DD/MM/YYYY",
+                )
+            if tipo == "regular":
+                with col_m:
+                    novo_comp_mes = st.selectbox(
+                        "Mês de competência",
+                        options=list(range(1, 13)),
+                        index=comp_mes_atual - 1,
+                        format_func=lambda m: MES_NOME[m],
+                    )
+                with col_a:
+                    novo_comp_ano = st.number_input(
+                        "Ano de competência",
+                        min_value=2020, max_value=2099, step=1,
+                        value=int(comp_ano_atual),
+                    )
+            else:
+                novo_comp_mes = None
+                with col_m:
+                    novo_comp_ano = st.number_input(
+                        "Ano do 13º",
+                        min_value=2020, max_value=2099, step=1,
+                        value=int(comp_ano_atual),
+                    )
+
+            col_c, col_s = st.columns([1, 1])
+            cancelar = col_c.form_submit_button("Cancelar", use_container_width=True)
+            salvar = col_s.form_submit_button(
+                "Salvar alterações", type="primary", use_container_width=True
+            )
+
+            if cancelar:
+                st.session_state[edit_key] = False
+                st.rerun()
+
+            if salvar:
+                try:
+                    db.get_client().table("meses").update({
+                        "data_pagamento": nova_data.isoformat(),
+                        "ano": nova_data.year,
+                        "mes": nova_data.month,
+                        "competencia_mes": novo_comp_mes,
+                        "competencia_ano": int(novo_comp_ano),
+                    }).eq("id", mes["id"]).execute()
+                except Exception as e:
+                    st.error(
+                        f"Erro ao salvar: {e}. "
+                        "Pode ser que já exista outro registro pra esse mês/tipo — nesse caso, "
+                        "abra o outro registro e exclua um dos dois."
+                    )
+                    return
+                st.session_state[edit_key] = False
+                st.toast("Mês atualizado.")
+                st.rerun()
+
+
 def _form_excluir(banco_nome, grupo_hols, excluir_key):
     """Formulario pra excluir uma funcionaria do mes+banco, com confirmacao."""
     with st.container(border=True):
@@ -1188,15 +1270,25 @@ def _meses_detalhe(loja, aberto_key):
     elif tipo_m != "regular" and mes.get("competencia_ano"):
         caption += f"  •  Ano do 13º: {mes['competencia_ano']}"
 
-    col_a, col_b = st.columns([4, 1])
+    col_a, col_b, col_c = st.columns([6, 1, 1])
     with col_a:
         st.title(aba)
         st.caption(caption)
     with col_b:
         st.write("")
+        edit_key = f"editar_mes_{mes_id}"
+        if st.button("Editar mês", use_container_width=True, key=f"btn_edit_{mes_id}"):
+            st.session_state[edit_key] = not st.session_state.get(edit_key, False)
+            st.rerun()
+    with col_c:
+        st.write("")
         if st.button("← Voltar", use_container_width=True):
             del st.session_state[aberto_key]
             st.rerun()
+
+    # Formulario de edicao das informacoes do mes
+    if st.session_state.get(edit_key):
+        _form_editar_mes(mes, tipo_m, edit_key)
 
     st.write("")
 
