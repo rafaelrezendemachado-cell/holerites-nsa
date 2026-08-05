@@ -996,6 +996,107 @@ def _meses_lista(loja, aberto_key):
                     st.rerun()
 
 
+def _form_incluir_manual(loja, mes_id, banco_nome, banco_id, incluir_key):
+    """Formulario pra incluir manualmente uma funcionaria num mes+banco.
+
+    Usado quando alguem foi paga por fora e nao tem holerite no PDF.
+    """
+    with st.container(border=True):
+        st.markdown(f"**Incluir funcionária em {banco_nome}**")
+        st.caption(
+            "Use quando uma funcionária foi paga sem holerite (por fora). "
+            "Se ela já existir no cadastro, o app vai reutilizar; senão, cria uma nova."
+        )
+        with st.form(f"form_{incluir_key}", clear_on_submit=True):
+            col_a, col_b = st.columns([4, 1])
+            nome = col_a.text_input("Nome completo")
+            comiss = col_b.checkbox("Comissionada")
+
+            st.markdown("**Valores (R$)** — deixe zero o que não se aplica")
+            c1, c2, c3, c4 = st.columns(4)
+            motiv = c1.number_input("Motivacional", min_value=0.0, step=0.01, format="%.2f")
+            he = c2.number_input("HE", min_value=0.0, step=0.01, format="%.2f")
+            dom = c3.number_input("Domingo", min_value=0.0, step=0.01, format="%.2f")
+            vt = c4.number_input("VT", min_value=0.0, step=0.01, format="%.2f")
+
+            c5, c6, c7, c8 = st.columns(4)
+            vales = c5.number_input("Vales", min_value=0.0, step=0.01, format="%.2f")
+            uni = c6.number_input("Uniodonto", min_value=0.0, step=0.01, format="%.2f")
+            plano = c7.number_input("Plano de saúde", min_value=0.0, step=0.01, format="%.2f")
+            emp = c8.number_input("Empréstimo", min_value=0.0, step=0.01, format="%.2f")
+
+            c_liq, _, _, _ = st.columns([1, 1, 1, 1])
+            liq = c_liq.number_input(
+                "**Líquido (obrigatório)**",
+                min_value=0.0, step=0.01, format="%.2f",
+            )
+
+            col_c, col_s = st.columns([1, 1])
+            cancelar = col_c.form_submit_button("Cancelar", use_container_width=True)
+            salvar = col_s.form_submit_button(
+                "Incluir funcionária", type="primary", use_container_width=True
+            )
+
+            if cancelar:
+                st.session_state[incluir_key] = False
+                st.rerun()
+
+            if salvar:
+                if not nome.strip():
+                    st.error("Informe o nome completo.")
+                    return
+                if liq <= 0:
+                    st.error("Informe o valor líquido (deve ser maior que zero).")
+                    return
+
+                # Acha funcionaria existente por chave normalizada; se nao existir, cria
+                import unicodedata as _u
+                def _chave(s):
+                    return "".join(
+                        c for c in _u.normalize("NFKD", s)
+                        if not _u.combining(c)
+                    ).lower().strip()
+
+                funcs = db.listar_funcionarias(loja["id"], ativas_apenas=False)
+                func_id = None
+                for f in funcs:
+                    if _chave(f["nome"]) == _chave(nome):
+                        func_id = f["id"]
+                        break
+                if not func_id:
+                    r = db.upsert_funcionaria(
+                        loja_id=loja["id"], nome=nome.strip(),
+                        banco_id=banco_id, comissionada=bool(comiss),
+                    )
+                    func_id = r[0]["id"] if isinstance(r, list) else r["id"]
+
+                # Cria o holerite manual
+                cli = db.get_client()
+                try:
+                    cli.table("holerites").insert({
+                        "mes_id": mes_id,
+                        "funcionaria_id": func_id,
+                        "banco_id": banco_id,
+                        "comissionada": bool(comiss),
+                        "motivacional": safe_float(motiv),
+                        "he": safe_float(he),
+                        "domingo": safe_float(dom),
+                        "vales": safe_float(vales),
+                        "uniodonto": safe_float(uni),
+                        "plano_saude": safe_float(plano),
+                        "emprestimo": safe_float(emp),
+                        "vale_transporte": safe_float(vt),
+                        "liquido": safe_float(liq),
+                    }).execute()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+                    return
+
+                st.session_state[incluir_key] = False
+                st.toast(f"'{nome}' incluída em {banco_nome}.")
+                st.rerun()
+
+
 def _meses_detalhe(loja, aberto_key):
     from config import MES_NOME
     from datetime import datetime
@@ -1182,16 +1283,30 @@ def _meses_detalhe(loja, aberto_key):
         if vis_key not in st.session_state:
             st.session_state[vis_key] = True
 
-        # Cabecalho: nome do banco + setinha mostrar/ocultar
-        h_col1, h_col2 = st.columns([20, 0.7])
+        # Cabecalho: nome do banco + botao incluir + setinha
+        h_col1, h_col_add, h_col2 = st.columns([15, 3, 0.7])
         with h_col1:
             st.subheader(banco_nome)
+        with h_col_add:
+            st.write("")
+            incluir_key = f"incluir_show_{mes_id}_{ordem}_{banco_nome}"
+            if st.button("+ Incluir funcionária", key=f"btn_incl_{incluir_key}",
+                          use_container_width=True):
+                st.session_state[incluir_key] = not st.session_state.get(incluir_key, False)
+                st.rerun()
         with h_col2:
             st.write("")
             label = "▼" if st.session_state[vis_key] else "▶"
             if st.button(label, key=f"btn_{vis_key}", use_container_width=True):
                 st.session_state[vis_key] = not st.session_state[vis_key]
                 st.rerun()
+
+        # Formulario de inclusao manual (aparece se o usuario clicou no + Incluir)
+        if st.session_state.get(incluir_key):
+            banco_id_atual = next(
+                (b["id"] for b in bancos if b["nome"] == banco_nome), None
+            )
+            _form_incluir_manual(loja, mes_id, banco_nome, banco_id_atual, incluir_key)
 
         mostrar_tabela = st.session_state[vis_key]
         # Placeholder pros cards (sera preenchido logo abaixo do nome)
