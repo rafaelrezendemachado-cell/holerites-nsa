@@ -1097,6 +1097,68 @@ def _form_incluir_manual(loja, mes_id, banco_nome, banco_id, incluir_key):
                 st.rerun()
 
 
+def _form_excluir(banco_nome, grupo_hols, excluir_key):
+    """Formulario pra excluir uma funcionaria do mes+banco, com confirmacao."""
+    with st.container(border=True):
+        st.markdown(f"**Excluir funcionária de {banco_nome}**")
+        st.caption(
+            "Isso remove APENAS o holerite deste mês. O cadastro da funcionária continua."
+        )
+
+        # Mapa nome -> holerite_id (apenas as desse banco/mes)
+        opcoes = {}
+        for h in grupo_hols:
+            f = h.get("funcionaria") or {}
+            opcoes[f.get("nome", "?")] = h["id"]
+
+        if not opcoes:
+            st.info("Nenhuma funcionária pra excluir neste banco.")
+            if st.button("Fechar", key=f"close_{excluir_key}"):
+                st.session_state[excluir_key] = False
+                st.rerun()
+            return
+
+        # Estado de confirmacao
+        confirm_key = f"confirm_{excluir_key}"
+
+        if st.session_state.get(confirm_key):
+            # Etapa 2: pedir confirmacao
+            hol_id, nome_escolhido = st.session_state[confirm_key]
+            st.warning(
+                f"Tem certeza que quer excluir **{nome_escolhido}** de **{banco_nome}** deste mês? "
+                f"Esta ação **não pode ser desfeita**."
+            )
+            col_n, col_s = st.columns([1, 1])
+            if col_n.button("Não, cancelar", key=f"no_{excluir_key}",
+                             use_container_width=True):
+                del st.session_state[confirm_key]
+                st.rerun()
+            if col_s.button("Sim, excluir", key=f"yes_{excluir_key}",
+                             type="primary", use_container_width=True):
+                cli = db.get_client()
+                cli.table("holerites").delete().eq("id", hol_id).execute()
+                del st.session_state[confirm_key]
+                st.session_state[excluir_key] = False
+                st.toast(f"{nome_escolhido} excluída deste mês.")
+                st.rerun()
+        else:
+            # Etapa 1: escolher quem excluir
+            nome_escolhido = st.selectbox(
+                "Escolha quem excluir",
+                options=list(opcoes.keys()),
+                key=f"sel_{excluir_key}",
+            )
+            col_c, col_e = st.columns([1, 1])
+            if col_c.button("Cancelar", key=f"cancel_{excluir_key}",
+                             use_container_width=True):
+                st.session_state[excluir_key] = False
+                st.rerun()
+            if col_e.button("Excluir", key=f"del_{excluir_key}",
+                             type="primary", use_container_width=True):
+                st.session_state[confirm_key] = (opcoes[nome_escolhido], nome_escolhido)
+                st.rerun()
+
+
 def _meses_detalhe(loja, aberto_key):
     from config import MES_NOME
     from datetime import datetime
@@ -1283,16 +1345,27 @@ def _meses_detalhe(loja, aberto_key):
         if vis_key not in st.session_state:
             st.session_state[vis_key] = True
 
-        # Cabecalho: nome do banco + botao incluir + setinha
-        h_col1, h_col_add, h_col2 = st.columns([15, 3, 0.7])
+        # Cabecalho: nome do banco + botao incluir + botao excluir + setinha
+        h_col1, h_col_add, h_col_del, h_col2 = st.columns([12, 3, 3, 0.7])
         with h_col1:
             st.subheader(banco_nome)
+
+        incluir_key = f"incluir_show_{mes_id}_{ordem}_{banco_nome}"
+        excluir_key = f"excluir_show_{mes_id}_{ordem}_{banco_nome}"
+
         with h_col_add:
             st.write("")
-            incluir_key = f"incluir_show_{mes_id}_{ordem}_{banco_nome}"
             if st.button("+ Incluir funcionária", key=f"btn_incl_{incluir_key}",
                           use_container_width=True):
                 st.session_state[incluir_key] = not st.session_state.get(incluir_key, False)
+                st.session_state[excluir_key] = False  # fecha o outro
+                st.rerun()
+        with h_col_del:
+            st.write("")
+            if st.button("Excluir funcionária", key=f"btn_excl_{excluir_key}",
+                          use_container_width=True):
+                st.session_state[excluir_key] = not st.session_state.get(excluir_key, False)
+                st.session_state[incluir_key] = False  # fecha o outro
                 st.rerun()
         with h_col2:
             st.write("")
@@ -1301,12 +1374,17 @@ def _meses_detalhe(loja, aberto_key):
                 st.session_state[vis_key] = not st.session_state[vis_key]
                 st.rerun()
 
-        # Formulario de inclusao manual (aparece se o usuario clicou no + Incluir)
+        banco_id_atual = next(
+            (b["id"] for b in bancos if b["nome"] == banco_nome), None
+        )
+
+        # Formulario de inclusao manual
         if st.session_state.get(incluir_key):
-            banco_id_atual = next(
-                (b["id"] for b in bancos if b["nome"] == banco_nome), None
-            )
             _form_incluir_manual(loja, mes_id, banco_nome, banco_id_atual, incluir_key)
+
+        # Formulario de exclusao (mostra dropdown + confirmacao)
+        if st.session_state.get(excluir_key):
+            _form_excluir(banco_nome, grupo_hols, excluir_key)
 
         mostrar_tabela = st.session_state[vis_key]
         # Placeholder pros cards (sera preenchido logo abaixo do nome)
