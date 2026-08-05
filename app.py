@@ -683,6 +683,12 @@ def _etapa_conferencia(loja, etapa_key):
 
     func_por_chave = {chave(f["nome"]): f for f in funcs_banco}
 
+    # Banco padrao pra funcionarias novas: preferir "Dinheiro" se existir
+    banco_default_nova = next(
+        (b for b in opcoes_banco if b.lower() == "dinheiro"),
+        opcoes_banco[0] if opcoes_banco else "",
+    )
+
     # Monta dataframe
     linhas = []
     for nome_pdf, d in dados_pdf.items():
@@ -694,7 +700,7 @@ def _etapa_conferencia(loja, etapa_key):
             funcionaria_id = f_banco["id"]
         else:
             status = "Nova"
-            banco_nome = opcoes_banco[0] if opcoes_banco else ""
+            banco_nome = banco_default_nova
             comiss = False
             funcionaria_id = None
 
