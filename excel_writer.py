@@ -396,6 +396,127 @@ def _ordenar_abas_cronologico(wb):
 # API publica
 # ============================================================
 
+def gerar_xlsx_dsr(linhas, data_pag, aba_titulo="DSR"):
+    """
+    Gera Excel com relatorio de DSR (Descanso Semanal Remunerado).
+
+    `linhas`: list de dicts com nome, motivacional (ajuda de custo),
+              comissoes_raw, reflexo_dsr_raw.
+              Filtra automaticamente quem tem reflexo_dsr_raw <= 0.
+
+    Colunas:
+      Nome | Motivacional | Comissao | Reflexo DSR | % DSR/Com | Total (M+C+D)
+    """
+    import unicodedata
+
+    def chave(s):
+        return "".join(c for c in unicodedata.normalize("NFKD", s)
+                       if not unicodedata.combining(c)).lower()
+
+    # Filtra e ordena
+    dsr_linhas = [
+        l for l in linhas
+        if float(l.get("reflexo_dsr_raw") or 0) > 0
+    ]
+    dsr_linhas.sort(key=lambda l: chave(l["nome"]))
+
+    wb = Workbook()
+    if "Sheet" in wb.sheetnames:
+        wb.remove(wb["Sheet"])
+    ws = wb.create_sheet(title=aba_titulo)
+    ws.sheet_view.showGridLines = False
+
+    # Larguras
+    ws.column_dimensions["A"].width = 38
+    ws.column_dimensions["B"].width = 15
+    ws.column_dimensions["C"].width = 15
+    ws.column_dimensions["D"].width = 15
+    ws.column_dimensions["E"].width = 12
+    ws.column_dimensions["F"].width = 18
+
+    # Cabecalho
+    fill_header = PatternFill("solid", fgColor=COR_CINZA_ESCURO)
+    font_header = Font(name="Arial", size=10, color=COR_BRANCO, bold=True)
+    headers = ["Nome", "Motivacional", "Comissão", "Reflexo DSR",
+               "% DSR / Com.", "Total (M+C+DSR)"]
+    for col_idx, texto in enumerate(headers, start=1):
+        cel = ws.cell(row=1, column=col_idx, value=texto)
+        cel.fill = fill_header
+        cel.font = font_header
+        cel.border = _BORDA
+        cel.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[1].height = 28
+
+    # Titulo (linha 0 nao existe; vamos usar cabecalho e comecar dados na linha 2)
+    fonte_dados = Font(name="Arial", size=10, color=COR_PRETO_FORMULA)
+    fonte_dados_bold = Font(name="Arial", size=10, color=COR_PRETO_FORMULA, bold=True)
+
+    linha_atual = 2
+    for l in dsr_linhas:
+        motiv = float(l.get("motivacional") or 0)
+        com = float(l.get("comissoes_raw") or 0)
+        dsr = float(l.get("reflexo_dsr_raw") or 0)
+
+        ws.cell(row=linha_atual, column=1, value=l["nome"])
+        ws.cell(row=linha_atual, column=2, value=motiv)
+        ws.cell(row=linha_atual, column=3, value=com)
+        ws.cell(row=linha_atual, column=4, value=dsr)
+        # % DSR sobre comissao
+        pct_formula = f"=IFERROR(D{linha_atual}/C{linha_atual},0)"
+        ws.cell(row=linha_atual, column=5, value=pct_formula)
+        # Total M + C + DSR
+        total_formula = f"=B{linha_atual}+C{linha_atual}+D{linha_atual}"
+        ws.cell(row=linha_atual, column=6, value=total_formula)
+
+        for c in range(1, 7):
+            cel = ws.cell(row=linha_atual, column=c)
+            cel.font = fonte_dados
+            cel.border = _BORDA
+            if c == 1:
+                cel.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+            elif c == 5:
+                cel.number_format = "0.00%"
+                cel.alignment = Alignment(horizontal="center", vertical="center")
+            else:
+                cel.number_format = FORMATO_REAL
+                cel.alignment = Alignment(horizontal="right", vertical="center")
+
+        ws.row_dimensions[linha_atual].height = 18
+        linha_atual += 1
+
+    # Linha TOTAL
+    if dsr_linhas:
+        ini = 2
+        fim = linha_atual - 1
+        cel_a = ws.cell(row=linha_atual, column=1, value="TOTAL")
+        cel_a.font = fonte_dados_bold
+        cel_a.fill = PatternFill("solid", fgColor=COR_AMARELO_HEADER)
+        cel_a.border = _BORDA
+        cel_a.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+
+        for c, letra in [(2, "B"), (3, "C"), (4, "D"), (6, "F")]:
+            cel = ws.cell(row=linha_atual, column=c, value=f"=SUM({letra}{ini}:{letra}{fim})")
+            cel.font = fonte_dados_bold
+            cel.number_format = FORMATO_REAL
+            cel.fill = PatternFill("solid", fgColor=COR_AMARELO_HEADER)
+            cel.border = _BORDA
+            cel.alignment = Alignment(horizontal="right", vertical="center")
+        # Coluna % no total: media ponderada = SUM(D)/SUM(C)
+        cel_e = ws.cell(row=linha_atual, column=5,
+                        value=f"=IFERROR(SUM(D{ini}:D{fim})/SUM(C{ini}:C{fim}),0)")
+        cel_e.font = fonte_dados_bold
+        cel_e.number_format = "0.00%"
+        cel_e.fill = PatternFill("solid", fgColor=COR_AMARELO_HEADER)
+        cel_e.border = _BORDA
+        cel_e.alignment = Alignment(horizontal="center", vertical="center")
+
+        ws.row_dimensions[linha_atual].height = 20
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def gerar_xlsx_de_holerites(linhas, data_pag, planilha_existente_bytes=None,
                             tipo="regular", competencia_label=None):
     """

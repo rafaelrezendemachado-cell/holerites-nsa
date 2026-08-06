@@ -844,6 +844,10 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
         # vai todo pra coluna Comissão, sem distinção entre Comissão e Salário)
         comissionada_save = True if tipo != "regular" else bool(novo["Comiss."])
 
+        # Pega os valores brutos do PDF pra DSR (guardados por nome no dados_pdf)
+        dados_pdf_full = st.session_state.get(f"proc_dados_{loja['codigo']}", {})
+        dados_orig = dados_pdf_full.get(novo["Nome"]) or {}
+
         registros.append({
             "funcionaria_id": func_id,
             "banco_id": banco_id,
@@ -857,6 +861,8 @@ def _salvar_mes(loja, etapa_key, data_pag, df_orig, df_edit, nome_pra_id, bancos
             "emprestimo": safe_float(novo["Empr."]),
             "vale_transporte": safe_float(novo["VT"]),
             "liquido": safe_float(novo["Líquido"]),
+            "comissoes_raw": safe_float(dados_orig.get("comissoes_raw", 0)),
+            "reflexo_dsr_raw": safe_float(dados_orig.get("reflexo_dsr_raw", 0)),
         })
 
     try:
@@ -1708,7 +1714,7 @@ def _meses_detalhe(loja, aberto_key):
         st.rerun()
 
     st.write("")
-    col_sal, col_xlsx, _, col_del = st.columns([2, 2, 3, 2])
+    col_sal, col_xlsx, col_dsr, _, col_del = st.columns([2, 2, 2, 1, 2])
 
     with col_sal:
         if st.button("Salvar alterações", type="primary", use_container_width=True):
@@ -1785,6 +1791,36 @@ def _meses_detalhe(loja, aberto_key):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
+
+    with col_dsr:
+        # Excel DSR: Nome | Motivacional | Comissao | Reflexo DSR | % | Total
+        linhas_dsr = []
+        for h in hols:
+            f = h.get("funcionaria") or {}
+            linhas_dsr.append({
+                "nome": f.get("nome", "?"),
+                "motivacional": float(h.get("motivacional") or 0),
+                "comissoes_raw": float(h.get("comissoes_raw") or 0),
+                "reflexo_dsr_raw": float(h.get("reflexo_dsr_raw") or 0),
+            })
+        from excel_writer import gerar_xlsx_dsr
+        try:
+            dsr_bytes = gerar_xlsx_dsr(linhas_dsr, data_pag)
+            nome_dsr = f"DSR_{loja['codigo']}_{mes['ano']}-{mes['mes']:02d}"
+            if tipo_m == "13_1":
+                nome_dsr += "_13o-1a"
+            elif tipo_m == "13_2":
+                nome_dsr += "_13o-2a"
+            nome_dsr += ".xlsx"
+            st.download_button(
+                "Baixar DSR",
+                data=dsr_bytes,
+                file_name=nome_dsr,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.error(f"Erro DSR: {e}")
 
     with col_del:
         if st.button("Excluir mês", use_container_width=True):

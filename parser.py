@@ -66,6 +66,11 @@ def _resolver_nome_canonico(nome_cru):
 # Vale transporte (codigo 48) entra na coluna L
 CODIGO_VALE_TRANSPORTE = 48
 
+# Codigos "brutos" - nao entram nas colunas normais (viram Comissao/Salario
+# via formula inversa), mas guardamos pra gerar o relatorio DSR
+CODIGO_COMISSOES = 203       # C O M I S S O E S
+CODIGO_REFLEXO_DSR = 853     # REFLEXO COMISSOES DSR
+
 # Faixas horizontais (em pontos do PDF) onde cada valor aparece
 X_CODIGO_MAX  = 35       # codigos ficam em x0 entre 5 e 20
 X_VENC_MIN    = 370      # valores de vencimento ~ x0 399-404
@@ -215,6 +220,9 @@ def _parsear_pagina(page):
     motivacional = sum(v for c, v, _ in linhas if c in CODIGOS_MOTIVACIONAL)
     he = sum(v for c, v, _ in linhas if c in CODIGOS_HE)
     domingo = sum(v for c, v, _ in linhas if c in CODIGOS_DOMINGO)
+    # Codigos brutos pra relatorio DSR
+    comissoes_raw = sum(v for c, v, _ in linhas if c == CODIGO_COMISSOES)
+    reflexo_dsr_raw = sum(v for c, v, _ in linhas if c == CODIGO_REFLEXO_DSR)
     vales = sum(d for c, _, d in linhas if c in CODIGOS_VALES)
     uniodonto = sum(d for c, _, d in linhas if c in CODIGOS_UNIODONTO)
     plano_saude = sum(d for c, _, d in linhas if c in CODIGOS_PLANO_SAUDE)
@@ -246,6 +254,8 @@ def _parsear_pagina(page):
         "emprestimo": round(emprestimo, 2),
         "vale_transporte": round(vale_transp, 2),
         "liquido": round(liquido or 0, 2),
+        "comissoes_raw": round(comissoes_raw, 2),
+        "reflexo_dsr_raw": round(reflexo_dsr_raw, 2),
         "total_descontos_pdf": round(total_desc_pdf or 0, 2),
         "_soma_capturados": round(soma_capt, 2),
         "_nao_capturados": round(nao_capt, 2),
@@ -264,6 +274,7 @@ def _mesclar_paginas_transportar(dados_paginas):
             for k in [
                 "motivacional", "he", "domingo", "vales", "uniodonto",
                 "plano_saude", "emprestimo", "vale_transporte",
+                "comissoes_raw", "reflexo_dsr_raw",
                 "_soma_capturados", "_nao_capturados",
             ]:
                 ultima[k] = round(ultima[k] + p[k], 2)
