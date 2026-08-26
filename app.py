@@ -983,7 +983,7 @@ def _meses_lista(loja, aberto_key):
     # Mostra cada mes como linha clicavel
     for _, row in df.iterrows():
         with st.container(border=True):
-            col_a, col_b, col_c, col_d, col_e = st.columns([3, 3, 2, 2, 1])
+            col_a, col_b, col_c, col_d, col_e, col_f = st.columns([3, 3, 2, 2, 1, 1])
             with col_a:
                 st.markdown(f"**{row['Mês']}**")
                 if row["Competência"]:
@@ -999,6 +999,31 @@ def _meses_lista(loja, aberto_key):
             with col_e:
                 if st.button("Abrir", key=f"abrir_{row['id']}", use_container_width=True):
                     st.session_state[aberto_key] = row["id"]
+                    st.rerun()
+            with col_f:
+                confirm_key_lista = f"confirm_del_lista_{row['id']}"
+                if st.button("Excluir", key=f"del_lista_{row['id']}",
+                              use_container_width=True):
+                    st.session_state[confirm_key_lista] = True
+                    st.rerun()
+
+            # Confirmacao inline
+            if st.session_state.get(f"confirm_del_lista_{row['id']}"):
+                st.warning(
+                    f"Tem certeza que quer excluir **{row['Mês']}**? "
+                    "Todos os holerites desse mês serão apagados. "
+                    "Esta ação **não pode ser desfeita**."
+                )
+                col_n, col_s = st.columns([1, 1])
+                if col_n.button("Não, cancelar", key=f"no_lista_{row['id']}",
+                                 use_container_width=True):
+                    del st.session_state[f"confirm_del_lista_{row['id']}"]
+                    st.rerun()
+                if col_s.button("Sim, excluir", key=f"yes_lista_{row['id']}",
+                                 type="primary", use_container_width=True):
+                    db.excluir_mes(row["id"])
+                    del st.session_state[f"confirm_del_lista_{row['id']}"]
+                    st.toast(f"{row['Mês']} excluído.")
                     st.rerun()
 
 
