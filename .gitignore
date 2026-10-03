@@ -10,3 +10,4 @@ _conferir.py
 _compara.py
 venv/
 .venv/
+.claude/

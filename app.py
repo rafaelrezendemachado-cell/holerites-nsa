@@ -119,6 +119,7 @@ st.markdown(
 )
 
 
+import hashlib
 import math
 
 
@@ -1551,11 +1552,14 @@ def _meses_detalhe(loja, aberto_key):
         df_g = pd.DataFrame(linhas)
         # Banco e Comiss. vao no fim
         ordem_cols = ["Nome"] + COLUNAS_NUM + ["Banco", "Comiss."]
-        df_exibir = df_g.drop(columns=["_id"])[ordem_cols]
+        # _id vai junto (coluna oculta): as edicoes sao casadas pelo id do
+        # holerite, nunca pela posicao da linha, que a grade nao garante.
+        df_exibir = df_g[["_id"] + ordem_cols]
 
         # ===== Configura AgGrid =====
         gb = GridOptionsBuilder.from_dataframe(df_exibir)
         gb.configure_default_column(resizable=True, sortable=False, editable=False)
+        gb.configure_column("_id", hide=True)
 
         # Colunas de identificacao
         gb.configure_column("Nome", width=250, editable=False, pinned="left")
@@ -1645,10 +1649,16 @@ def _meses_detalhe(loja, aberto_key):
         gb.configure_column("Líquido", cellStyle=js_liquido_style)
 
         # Linha TOTAL fixa no rodape (pinned)
-        totais = {"Nome": "TOTAL", "Banco": "", "Comiss.": ""}
+        totais = {"_id": "", "Nome": "TOTAL", "Banco": "", "Comiss.": ""}
         for c in COLUNAS_NUM:
             totais[c] = float(df_exibir[c].sum())
         gb.configure_grid_options(pinnedBottomRowData=[totais])
+
+        # A chave da grade muda quando muda quem esta neste banco, pra grade
+        # ser recriada do zero em vez de reaproveitar o estado anterior.
+        assinatura = hashlib.md5(
+            "|".join(sorted(str(i) for i in df_g["_id"])).encode()
+        ).hexdigest()[:10]
 
         if mostrar_tabela:
             grid_resp = AgGrid(
@@ -1683,10 +1693,16 @@ def _meses_detalhe(loja, aberto_key):
                         "height": "23px !important",
                     },
                 },
-                key=f"aggrid_mes_{mes_id}_{ordem}_{banco_nome}",
+                key=f"aggrid_mes_{mes_id}_{ordem}_{banco_nome}_{assinatura}",
             )
 
             edited_g = pd.DataFrame(grid_resp["data"])
+            if "_id" not in edited_g.columns:
+                st.error(
+                    "A tabela não devolveu a identificação das linhas. "
+                    "Nada foi salvo. Recarregue a página."
+                )
+                st.stop()
             # Re-calcula colunas derivadas pra refletir edits sem salvar
             for c in COL_INPUT + ["Líquido"]:
                 edited_g[c] = pd.to_numeric(edited_g[c], errors="coerce").fillna(0)
@@ -1712,40 +1728,46 @@ def _meses_detalhe(loja, aberto_key):
     df = pd.concat([t[0] for t in edits_por_grupo], ignore_index=True) if edits_por_grupo else pd.DataFrame()
     edited = pd.concat([t[1] for t in edits_por_grupo], ignore_index=True) if edits_por_grupo else pd.DataFrame()
 
-    # Se o usuario trocou o banco em qualquer linha, salva TODAS as edicoes
-    # pendentes (de todas as linhas) e re-renderiza. Isso evita perder trabalho
-    # quando o usuario estava editando varias coisas antes de mudar o banco.
-    houve_mudanca_banco = any(
-        orig["Banco"] != novo["Banco"]
-        for orig, novo in zip(df.to_dict("records"), edited.to_dict("records"))
-    )
-    if houve_mudanca_banco:
+    # Casa cada linha editada com a original PELO ID do holerite.
+    orig_por_id = {r["_id"]: r for r in df.to_dict("records")} if not df.empty else {}
+    pares = []
+    for novo in (edited.to_dict("records") if not edited.empty else []):
+        orig = orig_por_id.get(novo.get("_id"))
+        if orig is not None:
+            pares.append((orig, novo))
+
+    CAMPOS_VALOR = [
+        ("Motivac.", "motivacional"), ("HE", "he"), ("Domingo", "domingo"),
+        ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
+        ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
+    ]
+
+    def _diferencas(orig, novo):
+        update = {}
+        if orig["Banco"] != novo["Banco"]:
+            novo_banco_id = nome_pra_id.get(novo["Banco"])
+            if novo_banco_id:
+                update["banco_id"] = novo_banco_id
+        if bool(orig["Comiss."]) != bool(novo["Comiss."]):
+            update["comissionada"] = bool(novo["Comiss."])
+        for lbl, dbcol in CAMPOS_VALOR:
+            n_ = safe_float(novo[lbl])
+            if abs(safe_float(orig[lbl]) - n_) > 0.005:
+                update[dbcol] = n_
+        return update
+
+    # Se o usuario trocou o banco em qualquer linha, salva as edicoes
+    # pendentes e re-renderiza (a funcionaria muda de bloco).
+    if any(orig["Banco"] != novo["Banco"] for orig, novo in pares):
         movidas = 0
         n_outras = 0
-        for orig, novo in zip(df.to_dict("records"), edited.to_dict("records")):
-            update = {}
-            # Mudanca de banco
-            if orig["Banco"] != novo["Banco"]:
-                novo_banco_id = nome_pra_id.get(novo["Banco"])
-                if novo_banco_id:
-                    update["banco_id"] = novo_banco_id
-                    movidas += 1
-            # Mudanca de comissionada
-            if orig["Comiss."] != novo["Comiss."]:
-                update["comissionada"] = bool(novo["Comiss."])
-            # Mudancas de valores
-            for lbl, dbcol in [
-                ("Motivac.", "motivacional"), ("HE", "he"), ("Domingo", "domingo"),
-                ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
-                ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
-            ]:
-                o = safe_float(orig[lbl])
-                n_ = safe_float(novo[lbl])
-                if abs(o - n_) > 0.005:
-                    update[dbcol] = n_
+        for orig, novo in pares:
+            update = _diferencas(orig, novo)
             if update:
                 db.atualizar_holerite(orig["_id"], update)
-                if "banco_id" not in update:
+                if "banco_id" in update:
+                    movidas += 1
+                else:
                     n_outras += 1
         msg = f"{movidas} movida(s) de banco"
         if n_outras:
@@ -1759,21 +1781,8 @@ def _meses_detalhe(loja, aberto_key):
     with col_sal:
         if st.button("Salvar alterações", type="primary", use_container_width=True):
             n = 0
-            for orig, novo in zip(df.to_dict("records"), edited.to_dict("records")):
-                update = {}
-                if orig["Banco"] != novo["Banco"]:
-                    update["banco_id"] = nome_pra_id.get(novo["Banco"])
-                if orig["Comiss."] != novo["Comiss."]:
-                    update["comissionada"] = bool(novo["Comiss."])
-                for campo_lbl, campo_db in [
-                    ("Motivac.", "motivacional"), ("HE", "he"), ("Domingo", "domingo"),
-                    ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
-                    ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
-                ]:
-                    o = safe_float(orig[campo_lbl])
-                    n_ = safe_float(novo[campo_lbl])
-                    if abs(o - n_) > 0.005:
-                        update[campo_db] = n_
+            for orig, novo in pares:
+                update = _diferencas(orig, novo)
                 if update:
                     db.atualizar_holerite(orig["_id"], update)
                     n += 1
