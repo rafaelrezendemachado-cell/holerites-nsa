@@ -1712,30 +1712,45 @@ def _meses_detalhe(loja, aberto_key):
     df = pd.concat([t[0] for t in edits_por_grupo], ignore_index=True) if edits_por_grupo else pd.DataFrame()
     edited = pd.concat([t[1] for t in edits_por_grupo], ignore_index=True) if edits_por_grupo else pd.DataFrame()
 
-    # Se o usuario trocou o banco em qualquer linha, salva ja e re-renderiza
-    # (move automaticamente pro bloco do novo banco)
-    movidas = 0
-    for orig, novo in zip(df.to_dict("records"), edited.to_dict("records")):
-        if orig["Banco"] != novo["Banco"]:
-            novo_banco_id = nome_pra_id.get(novo["Banco"])
-            if novo_banco_id:
-                update = {"banco_id": novo_banco_id}
-                # Salva tambem outras edicoes pendentes nessa linha pra nao perder
-                if orig["Comiss."] != novo["Comiss."]:
-                    update["comissionada"] = bool(novo["Comiss."])
-                for lbl, dbcol in [
-                    ("Motivac.", "motivacional"), ("HE", "he"), ("Domingo", "domingo"),
-                    ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
-                    ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
-                ]:
-                    o = safe_float(orig[lbl])
-                    n_ = safe_float(novo[lbl])
-                    if abs(o - n_) > 0.005:
-                        update[dbcol] = n_
+    # Se o usuario trocou o banco em qualquer linha, salva TODAS as edicoes
+    # pendentes (de todas as linhas) e re-renderiza. Isso evita perder trabalho
+    # quando o usuario estava editando varias coisas antes de mudar o banco.
+    houve_mudanca_banco = any(
+        orig["Banco"] != novo["Banco"]
+        for orig, novo in zip(df.to_dict("records"), edited.to_dict("records"))
+    )
+    if houve_mudanca_banco:
+        movidas = 0
+        n_outras = 0
+        for orig, novo in zip(df.to_dict("records"), edited.to_dict("records")):
+            update = {}
+            # Mudanca de banco
+            if orig["Banco"] != novo["Banco"]:
+                novo_banco_id = nome_pra_id.get(novo["Banco"])
+                if novo_banco_id:
+                    update["banco_id"] = novo_banco_id
+                    movidas += 1
+            # Mudanca de comissionada
+            if orig["Comiss."] != novo["Comiss."]:
+                update["comissionada"] = bool(novo["Comiss."])
+            # Mudancas de valores
+            for lbl, dbcol in [
+                ("Motivac.", "motivacional"), ("HE", "he"), ("Domingo", "domingo"),
+                ("Vales", "vales"), ("Uniod.", "uniodonto"), ("Plano", "plano_saude"),
+                ("Empr.", "emprestimo"), ("VT", "vale_transporte"), ("Líquido", "liquido"),
+            ]:
+                o = safe_float(orig[lbl])
+                n_ = safe_float(novo[lbl])
+                if abs(o - n_) > 0.005:
+                    update[dbcol] = n_
+            if update:
                 db.atualizar_holerite(orig["_id"], update)
-                movidas += 1
-    if movidas:
-        st.toast(f"{movidas} funcionária(s) movida(s) de banco.")
+                if "banco_id" not in update:
+                    n_outras += 1
+        msg = f"{movidas} movida(s) de banco"
+        if n_outras:
+            msg += f" + {n_outras} outra(s) edição(ões) salva(s)"
+        st.toast(f"✓ {msg}.")
         st.rerun()
 
     st.write("")
